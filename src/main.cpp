@@ -2,8 +2,11 @@
 #include <fstream>
 #include <sstream>
 #include <iterator>
+#include <thread>
 #include <vector>
 #include <regex>
+#include <cctype>
+#include <chrono>
 
 
 std::string do_replace( std::string const & in, std::string const & from, std::string const & to )
@@ -19,7 +22,21 @@ std::string trim(const std::string& line)
     return start == end ? std::string() : line.substr(start, end - start + 1);
 }
 
-std::string* extract_vars;
+std::vector<std::string> extract_vars(std::string arg, int &amount) {
+	amount = 0;
+	//std::cout << "hi1\n";
+	std::vector<std::string> ret;
+	
+	while(arg.find("#g") != std::string::npos) {
+	//	std::cout << arg<<std::endl;
+		++amount;
+		ret.push_back( trim ( arg.substr(arg.find("#g")+3, arg.find(")") - arg.find("#g") - 3) ) ) ;
+		//std::cout << "hi2\n";
+		arg.erase(0, arg.find(")")+1);
+	}
+
+	return ret;
+}
 
 std::vector<std::string> split(std::string line, char token) {
 	line = trim(line);
@@ -79,18 +96,46 @@ int main(int argc, char* argv[]) {
 			token = do_replace(token, "\\\\", "\\\\");
 			if(isVar) {
 				isVar = false;
-			writefile += "std::cout << \"" + token + "\";\n";
+				int a;
+				std::vector<std::string> words = extract_vars(token, a);
+
+				for(int i = 0; i<words.size(); i++) {
+					token.replace(token.find("#g"), token.find(")")-token.find("#g")+1, "\"<<" + words.at(i) + "<<\"");
+				}
+
+				writefile += "std::cout << \"" + token + "\";\n";
 
 			} else {
 			writefile += "std::cout << \"" + token + "\";\n";
 			}
 		} else
 		if(token == "#s") {
-			token = line.substr(line.find("(")+1, line.find(")")-1-line.find("("));
+
+
+			int a;
+			token = line.substr(line.find("(")+1, line.rfind(")")-line.find("(")-1);
 			token = do_replace(token, "\"", "\\\"");
 
+			std::cout << token << std::endl;
+			std::vector<std::string> words = extract_vars(token, a);
+
+			for(int i = 0; i<words.size(); i++) {
+				token.replace(token.find("#g"), token.find(")")-token.find("#g")+1, "\"+" + words.at(i) + "+(std::string)\"");
+			}
+			std::string vname = token.substr(0, token.find("="));
+			vname = trim(vname);
+			std::string val = trim( token.substr(token.find("=")+1, token.length()) );
+
+			bool number=std::all_of(val.begin(), val.end(), ::isdigit);
+
 			token = do_replace(token, "\\\\", "\\\\");
-			writefile += "std::cout << \"" + token + "\";\n";
+
+			if(number) {
+			number= false;
+				writefile += "auto " + vname + " = " + val + ";\n";
+			} else {
+				writefile += "std::string " + vname + " = \"" + val + "\";\n";
+			}
 		}
 
 	}
@@ -98,6 +143,11 @@ int main(int argc, char* argv[]) {
 	writefile+="}";
 
 	outfile << writefile;
+	outfile.flush();
+
+
+
+	system("g++ out.cpp -o limeapp");
 
 	
 
